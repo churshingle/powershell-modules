@@ -49,6 +49,10 @@ $CheckVersion = {
         Updatable = $false
     }
 }
+function Script:Find-Command {
+    param([string]$Name)
+    return $null -ne (Get-Command -Name $Name -ErrorAction SilentlyContinue)
+}
 function Script:Check-NodeVersions ([Parameter(Mandatory = $false, Position = 0)][System.Object]$node) {
     if ($null -eq $node) {
         return @();
@@ -78,7 +82,8 @@ function Script:obtainJson {
     param (
         [string] $dir = "."
     )
-    return (Get-Content "$dir/package.json") | ConvertFrom-Json
+    $path = Join-Path -Path $dir -ChildPath "package.json"
+    return (Get-Content $path) | ConvertFrom-Json
 }
 function Script:Check-For-Update {
     param (
@@ -107,14 +112,13 @@ function Script:Upgrade {
     param (
         [string] $dir = "."
     )
-    Write-Host $dir
-    Write-Host ($dir -eq $null)
     $package = obtainJson $dir
     $runtime = Check-NodeVersions $package.dependencies
     $dev = Check-NodeVersions $package.devDependencies
     $total = $runtime.Length + $dev.Length
     $json = ConvertTo-Json -InputObject $package
-    Out-File -InputObject $json -FilePath ./package.json
+    $path = Join-Path -Path $dir -ChildPath "package.json"
+    Out-File -InputObject $json -FilePath $path
     $package = obtainJson
     $runtime = Check-NodeVersions $package.dependencies
     $dev = Check-NodeVersions $package.devDependencies
@@ -128,18 +132,23 @@ function Script:Clean {
     param (
         [string] $dir = "."
     )
-    $modules = "$dir/node_modules"
-    $yarnLock = "$dir/yarn.lock"
-    $npmLock = "$dir/package.lock"
-    if (Test-Path $modules) {
-        Write-Host "删除$modules..."
-        Remove-Item $modules -Recurse -Force
+    try {
+        $modules = Join-Path -Path $dir -ChildPath "node_modules"
+        $yarnLock = Join-Path -Path $dir -ChildPath "yarn.lock"
+        $npmLock = Join-Path -Path $dir -ChildPath "package.lock"
+        if (Test-Path $modules) {
+            Write-Host "删除$modules..."
+            Remove-Item $modules -Recurse -Force
+        }
+        if (Test-Path $yarnLock) {
+            Remove-Item $yarnLock -Force
+        }
+        if (Test-Path $npmLock) {
+            Remove-Item $npmLock -Force
+        }
     }
-    if (Test-Path $yarnLock) {
-        Remove-Item $yarnLock -Force
-    }
-    if (Test-Path $npmLock) {
-        Remove-Item $npmLock -Force
+    catch {
+        Clean $dir
     }
 }
 function Script:Refresh {
@@ -147,6 +156,10 @@ function Script:Refresh {
         [string] $dir = "."
     )
     Clean $dir
+    $path = Join-Path -Path $dir -ChildPath "package.json"
+    if (-not (Test-Path -Path $path)) {
+        throw "Couldn't find a package.json file in $dir"
+    }
     Write-Host "安装依赖..."
     Check-Yarn $dir
     yarn --registry=$Registry
@@ -165,10 +178,7 @@ function Script:Check-Yarn {
     param (
         [string] $dir = "."
     )
-    try {
-        Get-Command yarn | Out-Null
-    }
-    catch {
+    if (-not (Find-Command -Name yarn)) {
         Set-Location $dir
         npm install yarn --registry=$Registry
     }

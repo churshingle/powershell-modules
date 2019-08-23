@@ -1,5 +1,5 @@
 
-$modulesDir = Join-Path -Path (Get-Location).Path -ChildPath "modules"
+$modulesDir = Join-Path -Path $PSScriptRoot -ChildPath "modules"
 function Find-Command {
     param([string]$Name)
     return $null -ne (Get-Command -Name $Name -ErrorAction SilentlyContinue)
